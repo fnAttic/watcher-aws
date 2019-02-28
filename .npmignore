@@ -1,0 +1,12 @@
+.git
+.gitignore
+.jshintrc
+.nvmrc
+
+architecture
+backup
+dist
+notes
+
+LICENSE
+README.md

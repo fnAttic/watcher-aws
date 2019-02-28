@@ -1,0 +1,199 @@
+swagger: '2.0'
+# Specification: https://swagger.io/specification/v2/
+
+info:
+  version: "1.0.0"
+  title: Watcher API
+
+schemes : [ "https" ]
+
+x-amazon-apigateway-api-key-source: HEADER
+securityDefinitions:
+  ApiKeyAuth:
+    type: apiKey
+    in: header
+    name: x-api-key
+
+paths:
+  /watcher:
+    get:
+      description: |
+        Gets `Watcher` objects.
+      security:
+        - ApiKeyAuth: []
+      produces: ["application/json"]
+      responses:
+        200:
+          description: Successful response
+          schema:
+            title: ArrayOfWatchers
+            type: array
+            items:
+              $ref: '#/definitions/Watcher'
+      x-amazon-apigateway-integration:
+        httpMethod: POST
+        type: AWS
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:dynamodb:action/Scan
+        credentials:
+          Fn::Sub: ${WatcherApiRole.Arn}
+        requestTemplates:
+          application/json: |
+            {
+              "TableName": "watchers"
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseTemplates: 
+              application/json: |
+                #set($inputRoot = $input.path('$'))
+                [
+                #foreach($elem in $inputRoot.Items)
+                  {
+                    "id" : "$elem.id.S",
+                    "created_at" : "$elem.created_at.S",
+                    "checked_at" : "$elem.checked_at.S",
+                    "location" : "$elem.location.S",
+                    "path" : "$elem.path.S"
+                  } 
+                  #if($foreach.hasNext),#end
+                #end
+                ]
+
+    post:
+      description: |
+        Creates a new `Watcher` object.
+      security:
+        - ApiKeyAuth: []
+      consumes: ["application/json"]
+      produces: ["application/json"]
+      parameters:
+        - in: body
+          name: body
+          description: Watcher object
+          required: true
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+              url:
+                type: string
+              path:
+                type: string
+            required: ["url", "path"]
+            additionalProperties: false
+      responses:
+        201:
+          description: Successful response
+          schema:
+            $ref: '#/definitions/Watcher'
+      x-amazon-apigateway-integration:
+        httpMethod: POST
+        type: AWS
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:dynamodb:action/PutItem
+        credentials:
+          Fn::Sub: ${WatcherApiRole.Arn}
+        requestTemplates:
+          application/json: |
+            {
+              "TableName": "watchers",
+              "Item": {
+                  "id": {"S": "$context.requestId"},
+                  "location": {"S": "$input.path('$.location')"},
+                  "path": {"S": "$input.path('$.path')"},
+                  "created_at": {"S": "$context.requestTime"}
+              }
+            }
+        responses:
+          default:
+            statusCode: "201"
+
+  /watcher/{id}:
+    delete:
+      description: |
+        Deletes a specific watcher object.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          type: string
+          description: Unique ID
+          required: true
+      responses:
+        204:
+          description: Successful response
+      x-amazon-apigateway-integration:
+        httpMethod: POST
+        type: AWS
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:dynamodb:action/DeleteItem
+        credentials:
+          Fn::Sub: ${WatcherApiRole.Arn}
+        requestTemplates:
+          application/json: |
+            {
+              "TableName": "watchers",
+              "Key": {
+                  "id": {"S": "$input.params('id')"}
+              }
+            }
+        responses:
+          default:
+            statusCode: "204"
+
+  /watcher/{id}/run:
+    get:
+      description: |
+        Run check on a specific watcher item and return the findings.
+        Implemented as a lambda function
+      security:
+        - ApiKeyAuth: []
+      produces: ["application/json"]
+      parameters:
+        - in: path
+          name: id
+          type: string
+          description: Unique ID
+          required: true
+      responses:
+        200:
+          description: Successful response
+          schema:
+            $ref: '#/definitions/Watcher'
+      x-amazon-apigateway-integration:
+        type: aws        
+        httpMethod: POST
+        requestParameters:
+          integration.request.path.id: "method.request.path.id"
+        responses:
+          default:
+            statusCode: 200
+        uri: 
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WatcherRunFunction.Arn}/invocations
+        # NOTE: no need for credentials, it is set in the SAM
+        requestTemplates:
+          application/json: |
+            {
+              "id": "$input.params().path.id"
+            }        
+
+definitions:
+  Watcher:
+    type: object
+    properties:
+      id:
+        type: string
+      created_at:
+        type: string
+        format: datetime
+      checked_at:
+        type: string
+        format: datetime
+      url:
+        type: string
+      path:
+        type: string

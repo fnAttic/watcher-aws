@@ -1,0 +1,207 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: |
+  Regularly checking for changes in parts (using XPath) of a web page at a URL.
+
+Parameters:
+  EnvironmentParameter:
+    Description: "Stage: dev, prod"
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+  SwaggerLocation:
+    Description: "Swagger file location"
+    Type: String
+  SESRegion:
+    Description: "SES region for sending out e-mails"
+    Type: String
+    Default: eu-west-1
+    AllowedValues:
+      - eu-west-1
+      - us-east-1
+      - us-west-2
+  SESSender:
+    Description: "Sender e-mail address"
+    Type: String
+  SESRecipient:
+    Description: "Recipient e-mail address for change notifications"
+    Type: String
+
+Globals:
+  Function:
+    Runtime: nodejs8.10
+    Timeout: 10
+    MemorySize: 128
+
+Resources:
+
+  WatcherApi:
+    Type: 'AWS::Serverless::Api'
+    Properties:
+      Name: 'Watcher API'
+      StageName:
+        !Ref EnvironmentParameter
+      DefinitionBody:
+        'Fn::Transform':
+          Name: 'AWS::Include'
+          Parameters:
+            Location:
+              !Ref SwaggerLocation
+
+  WatcherApiUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    # NOTE: name of the stage is API name + 'Stage'
+    DependsOn: WatcherApiStage
+    Properties:
+      ApiStages:
+      - ApiId: !Ref WatcherApi
+        Stage: !Ref EnvironmentParameter
+      Description: Private Usage Plan
+      Quota:
+        Limit: 500
+        Period: MONTH
+      Throttle:
+        BurstLimit: 2
+        RateLimit: 1
+      UsagePlanName: PrivateUse
+
+  WatcherRunFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      CodeUri: ./
+      FunctionName: run-watcher
+      Environment:
+        Variables:
+          SES_REGION:
+            !Ref SESRegion
+          SES_SENDER:
+            !Ref SESSender
+          SES_RECIPIENT:
+            !Ref SESRecipient
+      Handler: functions/run-watcher.handler
+      Events:
+        Run:
+          Type: Api
+          Properties:
+            RestApiId:
+              !Ref WatcherApi
+            Path: /watcher/{id}/run
+            Method: get
+        ScheduledEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              !GetAtt WatcherFanoutQueue.Arn
+            BatchSize: 1
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: watchers
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sqs:*
+              Resource:
+                !GetAtt WatcherFanoutQueue.Arn
+
+  WatcherScanFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      FunctionName: scan-watcher
+      Environment:
+        Variables:
+          FANOUT_QUEUE: !GetAtt WatcherFanoutQueue.Arn
+      Handler: functions/scan-watchers.handler
+      Events:
+        Timer:
+          Type: Schedule
+          Properties:
+            Schedule: rate(6 hours)
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: watchers
+        - SQSSendMessagePolicy:
+            QueueName: WatcherFanout
+
+  WatchersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: watchers
+      BillingMode: "PAY_PER_REQUEST"
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  WatcherFanoutQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 300
+      QueueName: WatcherFanout
+      RedrivePolicy:
+        deadLetterTargetArn:
+          !GetAtt WatcherDLQueue.Arn
+        maxReceiveCount: 1
+
+  WatcherDLQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: WatcherDLQ
+
+  WatcherApiRole: 
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: WatcherApiRole
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: apigateway.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+      Policies:
+          -
+            PolicyName: DDBWatchersCRUD
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                  - dynamodb:BatchGetItem
+                  - dynamodb:DescribeTable
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:PutItem
+                Resource:
+                  - !GetAtt WatchersTable.Arn
+
+Outputs:
+  ApiRootUrl:
+    Description: Root URL for the Watcher API
+    Value: !Join
+      - ''
+      - - https://
+        - !Ref WatcherApi
+        - '.execute-api.'
+        - !Ref 'AWS::Region'
+        - '.amazonaws.com/'
+        - !Ref EnvironmentParameter
+  UsagePlanId:
+    Description: UsagePlan ID for reference when creating usage plan keys
+    Value:
+      !Ref WatcherApiUsagePlan

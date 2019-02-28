@@ -1,0 +1,7 @@
+architecture/icons
+architecture/export.sh
+dist
+node_modules
+notes
+
+deploy.sh

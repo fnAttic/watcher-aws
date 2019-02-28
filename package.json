@@ -1,0 +1,23 @@
+{
+  "name": "watcher.serverless",
+  "version": "1.0.0",
+  "description": "A simple website checker warning you about changes to any parts - identified by XPath - of a web page.",
+  "main": "handler.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Peter Kovari",
+  "license": "ISC",
+  "devDependencies": {
+    "aws-sdk": "^2.402.0"
+  },
+  "dependencies": {
+    "co": "^4.6.0",
+    "superagent": "^4.1.0",
+    "xmldom": "^0.1.27",
+    "xpath": "0.0.27"
+  }
+}

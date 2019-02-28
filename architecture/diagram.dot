@@ -1,0 +1,109 @@
+digraph G {
+    // This diagram uses the AWS PNG icon set Light_BG style
+    // symlink the folder here as 'icons'
+    
+    rankdir=LR
+    ranksep="1.5"
+    layout=dot
+    
+    subgraph cluster_triggers {
+
+        graph[style=invis]
+
+        api_gateway [
+            group=a
+            shape=none
+            label=""
+            xlabel="API Gateway"
+            fontname="Arial"
+            fixedsize=true width=1 height=1
+            image="icons/Networking_and_Content_Delivery/Amazon-API-Gateway_light-bg.png"
+        ]
+
+        cloudwatch [
+            group=a
+            shape=none label=""
+            xlabel="CloudWatch" fontname="Arial"
+            fixedsize=true width=1 height=1
+            image="icons/Management_and_Governance/Amazon-CloudWatch.png"
+        ]
+    }
+
+    subgraph cluster_middle {
+
+        graph[style=invis]
+
+        subgraph cluster_database {
+            label="Database"
+            fontname="Arial"
+            graph[style=dashed]
+        
+            dynamo_db [
+                shape=none
+                label=""
+                xlabel="Dynamo DB"
+                fontname="Arial"
+                fixedsize=true width=1 height=1
+                image="./icons/Database/Amazon-DynamoDB_light-bg.png"
+            ]
+            ddb_table_watcher [
+                shape=none label=""
+                xlabel="Watcher" fontname="Arial"
+                fixedsize=true width=1 height=1
+                image="./icons/Database/Amazon-DynamoDB_Table_light-bg.png"
+            ]
+        }
+
+        lambda_watcher_run [
+            shape=none label=""
+            xlabel="Watcher Run" fontname="Arial"
+            fixedsize=true width=1 height=1
+            image="icons/Compute/AWS-Lambda_light-bg.png"
+        ]
+
+        sqs [
+            shape=none label=""
+            xlabel="SQS" fontname="Arial"
+            fixedsize=true width=1 height=1
+            image="icons/Application_Integration/Amazon-Simple-Queue-Service-SQS_light-bg.png"
+        ]
+
+        lambda_scheduled_watcher_runs [
+            shape=none label=""
+            xlabel="Scheduled Watcher Runs" fontname="Arial"
+            fixedsize=true width=1 height=1
+            image="icons/Compute/AWS-Lambda_light-bg.png"
+        ]
+    }
+
+    ses [
+        shape=none label=""
+        xlabel="SES" fontname="Arial"
+        fixedsize=true width=1 height=1
+        image="icons/Customer_Engagement/Amazon-Simple-Email-Service-SES_light-bg.png"
+    ]
+
+// connections
+
+    api_gateway -> ddb_table_watcher [
+        label="Create/List/Delete" fontname="Arial"
+        constraint=false
+    ]
+    api_gateway -> lambda_watcher_run [
+        label="GET /{id}/run" fontname="Arial"
+    ]
+    lambda_watcher_run -> ddb_table_watcher [
+        constraint=false
+    ]
+    sqs -> lambda_watcher_run [
+        constraint=false
+    ]
+    lambda_scheduled_watcher_runs -> sqs [
+        constraint=false
+    ]
+    cloudwatch -> lambda_scheduled_watcher_runs [
+        label="rate(6 hours)" fontname="Arial"
+        constraint=false
+    ]
+    lambda_watcher_run -> ses
+}
