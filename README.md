@@ -1,3 +1,5 @@
+# Moved to https://github.com/designfultech/watcher-aws
+
 # Watcher [Serverless App]
 
 A simple web page monitoring app sending e-mail alerts about changes to a page.
