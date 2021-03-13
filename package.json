@@ -17,7 +17,7 @@
   "dependencies": {
     "co": "^4.6.0",
     "superagent": "^4.1.0",
-    "xmldom": "^0.1.27",
+    "xmldom": "^0.5.0",
     "xpath": "0.0.27"
   }
 }
