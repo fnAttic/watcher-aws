@@ -12,7 +12,7 @@
   "author": "Peter Kovari",
   "license": "ISC",
   "devDependencies": {
-    "aws-sdk": "^2.402.0"
+    "aws-sdk": "^2.814.0"
   },
   "dependencies": {
     "co": "^4.6.0",
